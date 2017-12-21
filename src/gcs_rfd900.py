@@ -10,7 +10,9 @@ import time
 
 class RFD900_GCS:
     def __init__(self):
-        self.s=serial.Serial('/dev/ttyUSB1',57600)
+        port=rospy.get_param("rfd900_bridge_gcs/rfd900_port")
+        print(port)
+        self.s=serial.Serial(port,57600)
         self.tf_pub = rospy.Publisher('tf_rfd', TFMessage, queue_size=10)
         rospy.init_node('rfd_GCS', anonymous=True)
         self.tf_fmt='c10s10s7f'
@@ -28,10 +30,13 @@ class RFD900_GCS:
             print("failed to read")
             return
         print("got message")
-        if self.msg_type == 't':
-                self.data=data.strip()
-                self.publish_tf()
-        
+        try:
+            if self.msg_type == 't':
+                    self.data=data.strip()
+                    self.publish_tf()
+        except:
+            pass
+            
     def publish_tf(self):
         #print(self.msg_type)
         read_msg=struct.unpack(self.tf_fmt,self.data)
@@ -56,8 +61,4 @@ class RFD900_GCS:
                 
 aa=RFD900_GCS()
 while not rospy.is_shutdown():
-    #try:
-        aa.read_msg()
-    #except rospy.ROSInterruptException:
-     #   pass
-print(count)
+    aa.read_msg()

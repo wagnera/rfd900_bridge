@@ -10,12 +10,13 @@ import time
 
 class RFD900_Rover:
     def __init__(self):
-        self.s=serial.Serial('/dev/ttyUSB0',57600)
+        port=rospy.get_param("rfd900_bridge_gcs/rfd900_port")
+        self.s=serial.Serial(port,57600)
         rospy.init_node('rfd_rover', anonymous=True)
         rospy.Subscriber("tf", TFMessage, self.tf_callback)
 
         self.tf_fmt='c10s10s7f'
-        self.tf_rate=5
+        self.tf_rate=2
         self.tf_timer=time.time()
 
     def tf_callback(self,data):
