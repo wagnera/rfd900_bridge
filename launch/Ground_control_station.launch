@@ -1,0 +1,7 @@
+<launch>
+   <arg name="rosbag_file" default="$(find rfd900_bridge)/bags/tf_test.bag" />
+  
+   <node pkg="rfd900_bridge" type="gcs_rfd900.py" name="rfd900_bridge_gcs" output="screen">
+   <param name="rfd900_port" value="/dev/ttyUSB2" />
+   </node> 
+</launch>

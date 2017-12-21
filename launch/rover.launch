@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="rfd900_bridge" type="rover_rfd900.py" name="rfd900_bridge_gcs" output="screen">
+    <param name="rfd900_port" value="/dev/ttyUSB3" />
+   </node> 
+</launch>
