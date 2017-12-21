@@ -1,0 +1,6 @@
+<launch>
+    <!--node pkg="tf" type="static_transform_publisher" name="tf_test_pub" args="1.1234 2.23423 3.4345 0.12 0.14 0.15 map odom 200"/--> 
+    <arg name="rosbag_file" default="$(find rfd900_bridge)/bags/tf_test.bag" />
+  
+   <node pkg="rosbag" type="play" name="rosbagplay" args="-l --clock $(arg rosbag_file)"/> 
+</launch>
