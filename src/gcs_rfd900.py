@@ -19,7 +19,7 @@ class RFD900_GCS:
             
         try:
             print("reading")
-            data=self._readline()
+            data=self.s.readline()
             print(len(data))
             self.msg_type=data[0]
             print("message type:",self.msg_type)
