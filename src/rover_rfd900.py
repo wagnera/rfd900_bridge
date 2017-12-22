@@ -3,6 +3,7 @@ import rospy
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import Twist
+import tf2_ros
 import struct
 import serial
 import time
@@ -15,7 +16,8 @@ class RFD900_Rover:
         port=rospy.get_param("rfd900_bridge_gcs/rfd900_port")
         self.s=serial.Serial(port,57600)
         rospy.init_node('rfd_rover', anonymous=True)
-        rospy.Subscriber("tf", TFMessage, self.tf_callback)
+        self.tfBuffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tfBuffer)
         self.cv_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         self.cv_fmt='c2f'
         self.tf_fmt='c10s10s7f'
@@ -42,18 +44,16 @@ class RFD900_Rover:
         except:
             pass
 
-    def tf_callback(self,data):
-        if time.time() < self.tf_timer:
+    def get_tf(self):
+        try:
+            MSG = self.tfBuffer.lookup_transform('map', 'odom', rospy.Time())
+        except:
+            print("failed to get tf")
             return
-        MSG=data.transforms[0]
         H=MSG.header
         Ro=MSG.transform.rotation
         Tr=MSG.transform.translation
-        #print(self.tf_fmt,H.frame_id,data.transforms[0].child_frame_id,
-           # Tr.x,Tr.y,Tr.z,Ro.x,Ro.y,Ro.z,Ro.w)
         packet=struct.pack(self.tf_fmt,'t',H.frame_id,MSG.child_frame_id,Tr.x,Tr.y,Tr.z,Ro.x,Ro.y,Ro.z,Ro.w)
-        #print(packet)
-        #self.s.write(binascii.hexlify(packet)+'\n')
         self.s.write(bytes(packet)+'\n')
         self.tf_timer=time.time()+1/float(self.tf_rate)
 
@@ -70,9 +70,9 @@ class RFD900_Rover:
 
             if self.s.inWaiting() > 0:
                 self.read_msg()
-            #if self.write_timer < time.time():
-            #    self.write('dasdasd')
-            #    print(self.s.out_waiting)
+            if self.tf_timer < time.time():
+                self.get_tf()
+                #print(self.s.out_waiting)
 
     def spinner(self):
         thread.start_new_thread(self.read_msg_spinner())

@@ -45,11 +45,10 @@ class RFD900_GCS:
     def publish_tf(self):
         #print(self.msg_type)
         read_msg=struct.unpack(self.tf_fmt,self.data)
-        #print(read_msg)
         t = TransformStamped()
-        t.header.frame_id = read_msg[1]
+        t.header.frame_id = read_msg[1].strip(b'\x00')
         t.header.stamp = rospy.Time.now()
-        t.child_frame_id = read_msg[2]
+        t.child_frame_id = read_msg[2].strip(b'\x00')
         t.transform.translation.x = read_msg[3]
         t.transform.translation.y = read_msg[4]
         t.transform.translation.z = read_msg[5]
