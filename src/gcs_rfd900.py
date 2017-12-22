@@ -17,27 +17,27 @@ class RFD900_GCS:
         rospy.init_node('rfd_GCS', anonymous=True)
         self.tf_pub = rospy.Publisher('tf_rfd', TFMessage, queue_size=10)
         rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
+        self.serial_buffer=""
+        self.data=""
         self.tf_fmt='c10s10s7f'
         self.cv_fmt='c2f'
         self.cv_rate=5
         self.cv_timer=time.time()
 
     def read_msg(self):
-            
-        try:
-            print("reading")
-            data=self.s.readline()
-            print(len(data))
-            self.msg_type=data[0]
-            print("message type:",self.msg_type)
-            
-        except:
-            print("failed to read")
-            return
-        print("got message")
+        current_read=''
+        current_read=self.s.read(self.s.inWaiting())
+        self.serial_buffer=self.serial_buffer + current_read
+
+        while self.serial_buffer.find('\n') > 0:
+            self.data,self.serial_buffer=self.serial_buffer.split('\n',1)
+            #print("complet packet: ",self.data) 
+            self.msg_type=self.data[0]
+            #print("message type:",self.msg_type)
+
         try:
             if self.msg_type == 't':
-                    self.data=data.strip()
+                    #self.data=data.strip()
                     self.publish_tf()
         except:
             pass
@@ -45,7 +45,7 @@ class RFD900_GCS:
     def publish_tf(self):
         #print(self.msg_type)
         read_msg=struct.unpack(self.tf_fmt,self.data)
-        print(read_msg)
+        #print(read_msg)
         t = TransformStamped()
         t.header.frame_id = read_msg[1]
         t.header.stamp = rospy.Time.now()
@@ -71,8 +71,9 @@ class RFD900_GCS:
         self.cv_timer=time.time()+1/float(self.cv_rate)
 
     def read_msg_spinner(self):
-        while 1:
-            self.read_msg()
+            while 1:
+                if self.s.inWaiting() > 0:
+                    self.read_msg()
 
     def spinner(self):
         thread.start_new_thread(self.read_msg_spinner())
