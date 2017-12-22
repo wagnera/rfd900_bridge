@@ -3,19 +3,24 @@ import rospy
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import Twist
 import serial
 import struct
 import time
+import thread
 
 
 class RFD900_GCS:
     def __init__(self):
         port=rospy.get_param("rfd900_bridge_gcs/rfd900_port")
-        print(port)
         self.s=serial.Serial(port,57600)
-        self.tf_pub = rospy.Publisher('tf_rfd', TFMessage, queue_size=10)
         rospy.init_node('rfd_GCS', anonymous=True)
+        self.tf_pub = rospy.Publisher('tf_rfd', TFMessage, queue_size=10)
+        rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
         self.tf_fmt='c10s10s7f'
+        self.cv_fmt='c2f'
+        self.cv_rate=5
+        self.cv_timer=time.time()
 
     def read_msg(self):
             
@@ -40,7 +45,7 @@ class RFD900_GCS:
     def publish_tf(self):
         #print(self.msg_type)
         read_msg=struct.unpack(self.tf_fmt,self.data)
-        #print(read_msg)
+        print(read_msg)
         t = TransformStamped()
         t.header.frame_id = read_msg[1]
         t.header.stamp = rospy.Time.now()
@@ -56,9 +61,25 @@ class RFD900_GCS:
         self.tf_pub.publish(tfm)
         rospy.loginfo("Published TF Message")
 
+    def send_cmd_vel(self,data):
+        if time.time() < self.cv_timer:
+            return
+        L=data.linear
+        A=data.angular
+        packet=struct.pack(self.cv_fmt,'c',L.x,A.z)
+        self.s.write(bytes(packet)+'\n')
+        self.cv_timer=time.time()+1/float(self.cv_rate)
+
+    def read_msg_spinner(self):
+        while 1:
+            self.read_msg()
+
+    def spinner(self):
+        thread.start_new_thread(self.read_msg_spinner())
+        rospy.spin()
+
     def calc_checksum(self):
         pass
                 
 aa=RFD900_GCS()
-while not rospy.is_shutdown():
-    aa.read_msg()
+aa.spinner()

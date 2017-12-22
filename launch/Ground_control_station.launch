@@ -2,7 +2,7 @@
    <arg name="is_test" default="false" />
   
    <node pkg="rfd900_bridge" type="gcs_rfd900.py" name="rfd900_bridge_gcs" output="screen">
-   <param name="rfd900_port" value="/dev/ttyUSB3" />
+   <param name="rfd900_port" value="/dev/ttyUSB0" />
    <remap from="tf_rfd" to="/tf" unless="$(arg is_test)" />
    </node> 
 </launch>
