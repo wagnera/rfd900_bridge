@@ -14,7 +14,7 @@ import difflib
 
 class RFD900_Rover:
     def __init__(self):
-        port=rospy.get_param("rfd900_bridge_gcs/rfd900_port")
+        port=rospy.get_param("rfd900_bridge_rover/rfd900_port")
         self.s=serial.Serial(port,57600)
         rospy.init_node('rfd_rover', anonymous=True)
         self.tfBuffer = tf2_ros.Buffer()
