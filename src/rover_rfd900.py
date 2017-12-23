@@ -62,16 +62,14 @@ class RFD900_Rover:
         cm_fmt='c10sfIIff'
         temp=""
         bytess = struct.pack("{}h".format(len(data.data)), *data.data)
-        print(len(bytess))
         compressed_data=zlib.compress(bytess,9)
         packet=struct.pack(cm_fmt,Type,data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y)
         self.s.write(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe')
-        rospy.loginfo("Sent Cost Map")
+        rospy.loginfo("Sent Cost Map of size %i",len(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe'))
         self.cm_timer=time.time()+1/float(self.cm_rate)
 
     def local_CM_callback(self,data):
         temp_CM=[data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y,data.data]
-        print("local")
         try: self.local_CM
         except AttributeError:
             self.local_CM=temp_CM
@@ -82,7 +80,6 @@ class RFD900_Rover:
 
     def global_CM_callback(self,data):
         temp_CM=[data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y,data.data]
-        print("global")
         try: self.global_CM
         except AttributeError:
             self.global_CM=temp_CM
