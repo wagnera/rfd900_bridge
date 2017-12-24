@@ -27,43 +27,20 @@ class RFD900_GCS:
         self.cv_fmt='c2f'
         self.cv_rate=5
         self.cv_timer=time.time()
+        self.read_buffer=list()
 
     def read_msg(self):
         current_read=''
         current_read=self.s.read(self.s.inWaiting())
         self.serial_buffer=self.serial_buffer + current_read
-
         while self.serial_buffer.find('\x04\x17\xfe') > 0:
-            #print(self.serial_buffer.find('\x04\x17\xfe'),self.serial_buffer[self.serial_buffer.find('\x04\x17\xfe')-2:self.serial_buffer.find('\x04\x17\xfe')+2])
-            self.data,self.serial_buffer=self.serial_buffer.split('\x04\x17\xfe',1)
-            #print("new buffer: ",self.serial_buffer)
-            #print("complet packet: ",self.data) 
-            self.msg_type=self.data[0]
-            #print("message type:",self.msg_type)
-
-        try:
-            if self.msg_type == 't':
-                    #self.data=data.strip()
-                    self.publish_tf()
-        except AttributeError:
-            pass
-
-        try:
-            if self.msg_type == 'b':
-                    #self.data=data.strip()
-                    self.publish_cm('b')
-            if self.msg_type == 'a':
-                    #self.data=data.strip()
-                    self.publish_cm('a')
-        except AttributeError:
-            pass
-        except:
-            rospy.logwarn("CostMap Faile Somewhere")
+            data,self.serial_buffer=self.serial_buffer.split('\x04\x17\xfe',1)
+            self.read_buffer.append(data)
             
             
-    def publish_tf(self):
+    def publish_tf(self,data):
         #print(self.msg_type)
-        read_msg=struct.unpack(self.tf_fmt,self.data)
+        read_msg=struct.unpack(self.tf_fmt,data)
         t = TransformStamped()
         t.header.frame_id = read_msg[1].strip(b'\x00')
         t.header.stamp = rospy.Time.now()
@@ -77,12 +54,12 @@ class RFD900_GCS:
         t.transform.rotation.w = read_msg[9]
         tfm = TFMessage([t])
         self.tf_pub.publish(tfm)
-        rospy.loginfo("Published TF Message")
+        rospy.loginfo("Published TF Message %s -> %s",t.header.frame_id,t.child_frame_id)
 
-    def publish_cm(self,Type):
+    def publish_cm(self,Type,data):
         CM=OccupancyGrid()
         cm_fmt='c10sfIIff'
-        header=self.data[:struct.calcsize(cm_fmt)]
+        header=data[:struct.calcsize(cm_fmt)]
         read_header=struct.unpack(cm_fmt,header)
         CM.header.frame_id=read_header[1].strip('\x00')
         CM.info.resolution=read_header[2]
@@ -90,7 +67,7 @@ class RFD900_GCS:
         CM.info.height=read_header[4]
         CM.info.origin.position.x=read_header[5]
         CM.info.origin.position.y=read_header[6]
-        uncompressed=zlib.decompress(self.data[struct.calcsize(cm_fmt):])
+        uncompressed=zlib.decompress(data[struct.calcsize(cm_fmt):])
         data=struct.unpack(str(read_header[3]*read_header[4])+'h',uncompressed)
         CM.data=data
         if Type == 'b':
@@ -107,13 +84,32 @@ class RFD900_GCS:
         L=data.linear
         A=data.angular
         packet=struct.pack(self.cv_fmt,'c',L.x,A.z)
-        self.s.write(bytes(packet)+'\n')
+        self.s.write(bytes(packet)+'\x04\x17\xfe')
         self.cv_timer=time.time()+1/float(self.cv_rate)
+
+    def process_msgs(self):
+        if len(self.read_buffer) > 0:
+            msg=self.read_buffer.pop(0)
+            msg_type=msg[0]
+            try:
+                if msg_type == 't':
+                        self.publish_tf(msg)
+                if msg_type == 'b':
+                        #self.data=data.strip()
+                        self.publish_cm('b',msg)
+                if msg_type == 'a':
+                        #self.data=data.strip()
+                        self.publish_cm('a',msg)
+            except AttributeError:
+                pass
+            except zlib.error:
+                rospy.logwarn("Error in Costmap Decompression (truncated/incomplete stream)")
 
     def read_msg_spinner(self):
             while 1:
                 if self.s.inWaiting() > 0:
                     self.read_msg()
+                self.process_msgs()
 
     def spinner(self):
         thread.start_new_thread(self.read_msg_spinner())

@@ -22,10 +22,12 @@ class RFD900_Rover:
         self.cv_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, self.local_CM_callback)
         rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, self.global_CM_callback)
-        self.tf_rate=2
+        self.tf_rate=4
         self.tf_timer=time.time()
-        self.cm_rate=0.4
-        self.cm_timer=time.time()
+        self.lcm_rate=0.2
+        self.lcm_timer=time.time()
+        self.gcm_rate=1.0/60.0
+        self.gcm_timer=time.time()
         self.serial_buffer=""
         self.data=""
         self.write_buffer=list()
@@ -36,14 +38,15 @@ class RFD900_Rover:
         current_read=self.s.read(self.s.inWaiting())
         self.serial_buffer=self.serial_buffer + current_read
 
-        while self.serial_buffer.find('\n') > 0:
-            data,self.serial_buffer=self.serial_buffer.split('\n',1)
+        while self.serial_buffer.find('\x04\x17\xfe') > 0:
+            data,self.serial_buffer=self.serial_buffer.split('\x04\x17\xfe',1)
             self.read_buffer.append(data) 
       
 
     def get_tf(self):
         MSGS=list()
         try:
+            MSGS.append(self.tfBuffer.lookup_transform('map', 'odom', rospy.Time()))
             MSGS.append(self.tfBuffer.lookup_transform('map', 'base_link', rospy.Time()))
         except:
             return
@@ -57,38 +60,24 @@ class RFD900_Rover:
         self.tf_timer=time.time()+1/float(self.tf_rate)
 
     def send_costmap(self,data,Type):
-        if self.cm_timer > time.time():
-            return
         cm_fmt='c10sfIIff'
-        temp=""
         bytess = struct.pack("{}h".format(len(data.data)), *data.data)
         compressed_data=zlib.compress(bytess,9)
         packet=struct.pack(cm_fmt,Type,data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y)
         self.s.write(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe')
         rospy.loginfo("Sent Cost Map of size %i",len(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe'))
-        self.cm_timer=time.time()+1/float(self.cm_rate)
+        if Type == 'a':
+            self.gcm_timer=time.time()+1/float(self.gcm_rate)
+        if Type == 'b':
+            self.lcm_timer=time.time()+1/float(self.lcm_rate)
 
     def local_CM_callback(self,data):
-        temp_CM=[data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y,data.data]
-        try: self.local_CM
-        except AttributeError:
-            self.local_CM=temp_CM
-            self.send_costmap(data,'b')
-            return
-        self.local_CM=temp_CM
-        self.send_costmap(data,'b')
+        self.local_CM=data
+        #self.send_costmap(data,'b')
 
     def global_CM_callback(self,data):
-        temp_CM=[data.header.frame_id,data.info.resolution,data.info.width,data.info.height,data.info.origin.position.x,data.info.origin.position.y,data.data]
-        try: self.global_CM
-        except AttributeError:
-            self.global_CM=temp_CM
-            self.send_costmap(data,'a')
-            return
-        print(difflib.ndiff(temp_CM, self.global_CM))
-        self.global_CM=temp_CM
-        self.send_costmap(data,'a')
-        print("sending global?")
+        self.global_CM=data
+        #self.send_costmap(data,'a')
 
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
@@ -107,6 +96,15 @@ class RFD900_Rover:
             if self.tf_timer < time.time():
                 self.get_tf()
             self.process_msgs()
+            if self.gcm_timer < time.time():
+                try: self.send_costmap(self.global_CM,'a')
+                except AttributeError:
+                    pass
+            if self.lcm_timer < time.time():
+                try: self.send_costmap(self.local_CM,'b')
+                except AttributeError:
+                    pass
+
 
     def process_msgs(self):
         if len(self.write_buffer) > 0:
@@ -119,13 +117,11 @@ class RFD900_Rover:
                 if msg_type == 'c':
                         self.publish_cmd_vel(msg)
             except:
-                print("error")#pass
+                rospy.logwarn("Failed to Send Twist Msg")
 
 
     def spinner(self):
         thread.start_new_thread(self.read_msg_spinner())
-        #print("statign 2 thread")
-        #thread.start_new_thread(self.process_msgs())
         rospy.spin()
 
 if __name__ == '__main__':
