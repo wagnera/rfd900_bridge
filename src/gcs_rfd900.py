@@ -5,6 +5,7 @@ from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
+from sensor_msgs.msg import NavSatFix
 import serial
 import struct
 import time
@@ -20,6 +21,7 @@ class RFD900_GCS:
         self.tf_pub = rospy.Publisher('tf_rfd', TFMessage, queue_size=10)
         self.Lcm_pub = rospy.Publisher('/rfd_bridge/local_costmap/costmap', OccupancyGrid, queue_size=10)
         self.Gcm_pub = rospy.Publisher('/rfd_bridge/global_costmap/costmap', OccupancyGrid, queue_size=10)
+        self.gps_pub = rospy.Publisher('/rfd_bridge/gps_fix', NavSatFix, queue_size=10)
         rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
         self.serial_buffer=""
         self.data=""
@@ -78,6 +80,17 @@ class RFD900_GCS:
             self.Gcm_pub.publish(CM)
             rospy.loginfo("Published Global Cost Map")
 
+    def publish_gps(self,data):
+        G=NavSatFix()
+        gps_fmt='c3f'
+        read_data=struct.unpack(gps_fmt,data)
+        G.latitude=read_data[1]
+        G.longitude=read_data[2]
+        G.altitude=read_data[3]
+        self.gps_pub.publish(G)
+        rospy.loginfo("Published GPS MSG")
+
+
     def send_cmd_vel(self,data):
         if time.time() < self.cv_timer:
             return
@@ -94,6 +107,8 @@ class RFD900_GCS:
             try:
                 if msg_type == 't':
                         self.publish_tf(msg)
+                if msg_type == 'f':
+                        self.publish_gps(msg)
                 if msg_type == 'b':
                         #self.data=data.strip()
                         self.publish_cm('b',msg)

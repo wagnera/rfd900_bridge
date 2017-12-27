@@ -4,6 +4,7 @@ from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
+from sensor_msgs.msg import NavSatFix
 import tf2_ros
 import struct
 import serial
@@ -22,8 +23,11 @@ class RFD900_Rover:
         self.cv_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, self.local_CM_callback)
         rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, self.global_CM_callback)
+        rospy.Subscriber("/mavros/global_position/raw/fix", NavSatFix, self.gps_callback)
         self.tf_rate=4
         self.tf_timer=time.time()
+        self.gps_rate=1
+        self.gps_timer=time.time()
         self.lcm_rate=0.2
         self.lcm_timer=time.time()
         self.gcm_rate=1.0/60.0
@@ -47,8 +51,13 @@ class RFD900_Rover:
         MSGS=list()
         try:
             MSGS.append(self.tfBuffer.lookup_transform('map', 'odom', rospy.Time()))
+        except:
+            pass
+        try:
             MSGS.append(self.tfBuffer.lookup_transform('map', 'base_link', rospy.Time()))
         except:
+            pass
+        if len(MSGS) == 0:
             return
         tf_fmt='c10s10s7f'
         for MSG in MSGS:
@@ -71,6 +80,14 @@ class RFD900_Rover:
         if Type == 'b':
             self.lcm_timer=time.time()+1/float(self.lcm_rate)
 
+    def send_gps(self):
+        gps_fmt='c3f'
+        data=self.gps_msg
+        packet=struct.pack(gps_fmt,'f',data.latitude,data.longitude,data.altitude)
+        self.s.write(bytes(packet)+'\x04\x17\xfe')
+        rospy.loginfo("Sent GPS msg")
+        self.gps_timer=time.time()+1/float(self.gps_rate)
+
     def local_CM_callback(self,data):
         self.local_CM=data
         #self.send_costmap(data,'b')
@@ -78,6 +95,9 @@ class RFD900_Rover:
     def global_CM_callback(self,data):
         self.global_CM=data
         #self.send_costmap(data,'a')
+
+    def gps_callback(self,data):
+        self.gps_msg=data
 
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
@@ -95,6 +115,10 @@ class RFD900_Rover:
                 self.read_msg()
             if self.tf_timer < time.time():
                 self.get_tf()
+            if self.gps_timer < time.time():
+                try: self.send_gps()
+                except AttributeError:
+                    pass
             self.process_msgs()
             if self.gcm_timer < time.time():
                 try: self.send_costmap(self.global_CM,'a')
