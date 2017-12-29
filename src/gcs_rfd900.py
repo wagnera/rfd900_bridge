@@ -117,7 +117,7 @@ class RFD900_GCS:
                         self.publish_cm('a',msg)
             except AttributeError:
                 pass
-            except passstruct.error:
+            except struct.error:
                 rospy.logwarn("Corrupt Packet")
             except zlib.error:
                 rospy.logwarn("Error in Costmap Decompression (truncated/incomplete stream)")
