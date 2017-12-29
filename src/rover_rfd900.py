@@ -145,6 +145,7 @@ class RFD900_Rover:
 
 
     def spinner(self):
+        self.read_msg_spinner()
         rospy.spin()
 
 if __name__ == '__main__':

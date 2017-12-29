@@ -129,6 +129,7 @@ class RFD900_GCS:
                 self.process_msgs()
 
     def spinner(self):
+        self.read_msg_spinner()
         rospy.spin()
 
     def calc_checksum(self):
