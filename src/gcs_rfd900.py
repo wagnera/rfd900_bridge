@@ -117,11 +117,13 @@ class RFD900_GCS:
                         self.publish_cm('a',msg)
             except AttributeError:
                 pass
+            except passstruct.error:
+                rospy.logwarn("Corrupt Packet")
             except zlib.error:
                 rospy.logwarn("Error in Costmap Decompression (truncated/incomplete stream)")
 
     def read_msg_spinner(self):
-            while 1:
+            while not rospy.is_shutdown():
                 if self.s.inWaiting() > 0:
                     self.read_msg()
                 self.process_msgs()

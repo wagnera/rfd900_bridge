@@ -109,7 +109,7 @@ class RFD900_Rover:
         rospy.loginfo("Publish Twist Msg")
 
     def read_msg_spinner(self):
-        while 1:
+        while not rospy.is_shutdown():
 
             if self.s.inWaiting() > 0:
                 self.read_msg()
