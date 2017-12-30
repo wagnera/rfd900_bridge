@@ -13,7 +13,7 @@ http://rfdesign.com.au/products/rfd900-modem/
 - [ ] Parameterize certain varaibles such as rate at which information is sent (throttle)
 - [ ] Add messages for move_base status and goals
 - [ ] Add messages for global and local plan
-- [ ] Add messages for GPS
+- [X] Add messages for GPS
 
 
 ## Stretch goals:
