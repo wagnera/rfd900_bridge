@@ -110,24 +110,26 @@ class RFD900_Rover:
 
     def read_msg_spinner(self):
         while not rospy.is_shutdown():
-
-            if self.s.inWaiting() > 0:
-                self.read_msg()
-            if self.tf_timer < time.time():
-                self.get_tf()
-            if self.gps_timer < time.time():
-                try: self.send_gps()
-                except AttributeError:
-                    pass
-            self.process_msgs()
-            if self.gcm_timer < time.time():
-                try: self.send_costmap(self.global_CM,'a')
-                except AttributeError:
-                    pass
-            if self.lcm_timer < time.time():
-                try: self.send_costmap(self.local_CM,'b')
-                except AttributeError:
-                    pass
+            try:    
+                if self.s.inWaiting() > 0:
+                    self.read_msg()
+                if self.tf_timer < time.time():
+                    self.get_tf()
+                if self.gps_timer < time.time():
+                    try: self.send_gps()
+                    except AttributeError:
+                        pass
+                self.process_msgs()
+                if self.gcm_timer < time.time():
+                    try: self.send_costmap(self.global_CM,'a')
+                    except AttributeError:
+                        pass
+                if self.lcm_timer < time.time():
+                    try: self.send_costmap(self.local_CM,'b')
+                    except AttributeError:
+                        pass
+            except IOError:
+                rospy.logwarn("Serial IO Error")
 
 
     def process_msgs(self):
