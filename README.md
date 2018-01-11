@@ -11,7 +11,7 @@ http://rfdesign.com.au/products/rfd900-modem/
 
 ## Currently being developed:
 - [ ] Parameterize certain varaibles such as rate at which information is sent (throttle)
-- [ ] Add messages for move_base status and goals
+- [X] Add messages for move_base status and goals
 - [ ] Add messages for global and local plan
 - [X] Add messages for GPS
 
