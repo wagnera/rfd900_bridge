@@ -107,7 +107,6 @@ class RFD900_Rover:
         gp_fmt='cI'
         bytess = struct.pack("{}f".format(len(self.GPlan)), *self.GPlan)
         compressed_data=zlib.compress(bytess,9)
-        print(len(bytess),len(compressed_data))
         packet=struct.pack(gp_fmt,'d',len(self.GPlan))
         self.s.write(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe')
         rospy.loginfo("Sent Move_base status msg")
@@ -130,10 +129,9 @@ class RFD900_Rover:
 
     def global_path_callback(self,data):
         self.GPlan=data.poses
-        print(len(data.poses))
         self.GPlan=list()
         for i in data.poses:
-            self.GPlan.extend([i.pose.position.x,i.pose.position.y])
+            self.GPlan.extend([float(i.pose.position.x),float(i.pose.position.y)])
         
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
