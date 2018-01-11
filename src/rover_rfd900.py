@@ -5,6 +5,7 @@ from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import NavSatFix
+from actionlib_msgs.msg import GoalStatusArray
 import tf2_ros
 import struct
 import serial
@@ -24,6 +25,7 @@ class RFD900_Rover:
         rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, self.local_CM_callback)
         rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, self.global_CM_callback)
         rospy.Subscriber("/mavros/global_position/raw/fix", NavSatFix, self.gps_callback)
+        rospy.Subscriber("/move_base/status", GoalStatusArray, self.mb_status_callback)
         self.tf_rate=4
         self.tf_timer=time.time()
         self.gps_rate=1
@@ -32,6 +34,8 @@ class RFD900_Rover:
         self.lcm_timer=time.time()
         self.gcm_rate=1.0/60.0
         self.gcm_timer=time.time()
+        self.mb_rate=1.0/2.0
+        self.mb_timer=time.time()
         self.serial_buffer=""
         self.data=""
         self.write_buffer=list()
@@ -88,6 +92,13 @@ class RFD900_Rover:
         rospy.loginfo("Sent GPS msg")
         self.gps_timer=time.time()+1/float(self.gps_rate)
 
+    def send_mb_status(self):
+        mbs_fmt='2c'
+        packet=struct.pack(mbs_fmt,'s',str(self.mb_status))
+        self.s.write(bytes(packet)+'\x04\x17\xfe')
+        rospy.loginfo("Sent Move_base status msg")
+        self.mb_timer=time.time()+1/float(self.mb_rate)
+
     def local_CM_callback(self,data):
         self.local_CM=data
         #self.send_costmap(data,'b')
@@ -99,6 +110,10 @@ class RFD900_Rover:
     def gps_callback(self,data):
         self.gps_msg=data
 
+    def mb_status_callback(self,data):
+        most_recent_index=len(data.status_list) - 1
+        self.mb_status=(data.status_list[most_recent_index].status)
+        
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
         read_msg=struct.unpack(cv_fmt,data)
@@ -120,6 +135,10 @@ class RFD900_Rover:
                     except AttributeError:
                         pass
                 self.process_msgs()
+                if self.mb_timer < time.time():
+                    try: self.send_mb_status()
+                    except AttributeError:
+                        pass
                 if self.gcm_timer < time.time():
                     try: self.send_costmap(self.global_CM,'a')
                     except AttributeError:

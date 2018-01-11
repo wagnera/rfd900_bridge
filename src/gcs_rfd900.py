@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 import rospy
 from std_msgs.msg import String
+from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import NavSatFix
+import actionlib_msgs.msg as alm
 import serial
 import struct
 import time
@@ -22,6 +24,7 @@ class RFD900_GCS:
         self.Lcm_pub = rospy.Publisher('/rfd_bridge/local_costmap/costmap', OccupancyGrid, queue_size=10)
         self.Gcm_pub = rospy.Publisher('/rfd_bridge/global_costmap/costmap', OccupancyGrid, queue_size=10)
         self.gps_pub = rospy.Publisher('/rfd_bridge/gps_fix', NavSatFix, queue_size=10)
+        self.mbs_pub = rospy.Publisher('/rfd_bridge/move_base/status', alm.GoalStatusArray, queue_size=10)
         rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
         self.serial_buffer=""
         self.data=""
@@ -80,6 +83,18 @@ class RFD900_GCS:
             self.Gcm_pub.publish(CM)
             rospy.loginfo("Published Global Cost Map")
 
+    def publish_mbs(self,data):
+        gsm=alm.GoalStatus()
+        gsa_header=Header()
+        msgs=['PENDING','ACTIVE','PREEMPTED','SUCCEEDED','ABORTED','REJECTED','PREEMPTING','RECALLING','RECALLED','LOST']
+        mbs_fmt='2c'
+        read_data=struct.unpack(mbs_fmt,data)
+        gsm.status=int(read_data[1])
+        gsm.text=msgs[gsm.status]
+        gsa=alm.GoalStatusArray(gsa_header, [gsm])
+        self.mbs_pub.publish(gsa)
+        rospy.loginfo("Published Movebase Status")
+
     def publish_gps(self,data):
         G=NavSatFix()
         gps_fmt='c3f'
@@ -115,6 +130,8 @@ class RFD900_GCS:
                 if msg_type == 'a':
                         #self.data=data.strip()
                         self.publish_cm('a',msg)
+                if msg_type == 's':
+                        self.publish_mbs(msg)
             except AttributeError:
                 pass
             except struct.error:
