@@ -4,6 +4,7 @@ from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Path
 from sensor_msgs.msg import NavSatFix
 from actionlib_msgs.msg import GoalStatusArray
 import tf2_ros
@@ -26,6 +27,7 @@ class RFD900_Rover:
         rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, self.global_CM_callback)
         rospy.Subscriber("/mavros/global_position/raw/fix", NavSatFix, self.gps_callback)
         rospy.Subscriber("/move_base/status", GoalStatusArray, self.mb_status_callback)
+        rospy.Subscriber("/move_base/NavfnROS/plan", Path, self.global_path_callback)
         self.tf_rate=4
         self.tf_timer=time.time()
         self.gps_rate=1
@@ -36,6 +38,8 @@ class RFD900_Rover:
         self.gcm_timer=time.time()
         self.mb_rate=1.0/2.0
         self.mb_timer=time.time()
+        self.gp_rate=1.0/10.0
+        self.gp_timer=time.time()
         self.serial_buffer=""
         self.data=""
         self.write_buffer=list()
@@ -99,6 +103,16 @@ class RFD900_Rover:
         rospy.loginfo("Sent Move_base status msg")
         self.mb_timer=time.time()+1/float(self.mb_rate)
 
+    def send_global_plan(self):
+        gp_fmt='cI'
+        bytess = struct.pack("{}f".format(len(self.GPlan)), *self.GPlan)
+        compressed_data=zlib.compress(bytess,9)
+        print(len(bytess),len(compressed_data))
+        packet=struct.pack(gp_fmt,'d',len(self.GPlan))
+        self.s.write(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe')
+        rospy.loginfo("Sent Move_base status msg")
+        self.gp_timer=time.time()+1/float(self.gp_rate)
+
     def local_CM_callback(self,data):
         self.local_CM=data
         #self.send_costmap(data,'b')
@@ -113,6 +127,13 @@ class RFD900_Rover:
     def mb_status_callback(self,data):
         most_recent_index=len(data.status_list) - 1
         self.mb_status=(data.status_list[most_recent_index].status)
+
+    def global_path_callback(self,data):
+        self.GPlan=data.poses
+        print(len(data.poses))
+        self.GPlan=list()
+        for i in data.poses:
+            self.GPlan.extend([i.pose.position.x,i.pose.position.y])
         
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
@@ -137,6 +158,10 @@ class RFD900_Rover:
                 self.process_msgs()
                 if self.mb_timer < time.time():
                     try: self.send_mb_status()
+                    except AttributeError:
+                        pass
+                if self.gp_timer < time.time():
+                    try: self.send_global_plan()
                     except AttributeError:
                         pass
                 if self.gcm_timer < time.time():

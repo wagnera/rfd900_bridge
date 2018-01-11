@@ -5,7 +5,9 @@ from std_msgs.msg import Header
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped
 from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
+from nav_msgs.msg import Path
 from sensor_msgs.msg import NavSatFix
 import actionlib_msgs.msg as alm
 import serial
@@ -25,6 +27,7 @@ class RFD900_GCS:
         self.Gcm_pub = rospy.Publisher('/rfd_bridge/global_costmap/costmap', OccupancyGrid, queue_size=10)
         self.gps_pub = rospy.Publisher('/rfd_bridge/gps_fix', NavSatFix, queue_size=10)
         self.mbs_pub = rospy.Publisher('/rfd_bridge/move_base/status', alm.GoalStatusArray, queue_size=10)
+        self.gp_pub = rospy.Publisher('/rfd_bridge/move_base/Gloal_Plan', Path, queue_size=10)
         rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
         self.serial_buffer=""
         self.data=""
@@ -95,6 +98,26 @@ class RFD900_GCS:
         self.mbs_pub.publish(gsa)
         rospy.loginfo("Published Movebase Status")
 
+    def publish_gp(self,data):
+        gp_fmt='cI'
+        header=data[:struct.calcsize(gp_fmt)]
+        read_header=struct.unpack(gp_fmt,header)
+        uncompressed=zlib.decompress(data[struct.calcsize(gp_fmt):])
+        data=struct.unpack(str(read_header[1])+'f',uncompressed)
+        poses=list()
+        for i in range(len(data)/2):
+            temp_pose=PoseStamped()
+            temp_pose.header.frame_id='map'
+            temp_pose.pose.position.x=data[2*i]
+            temp_pose.pose.position.y=data[2*i+1]
+            temp_pose.pose.orientation.w=1
+            poses.append(temp_pose)
+        path_Header=Header()
+        path_Header.frame_id='map'
+        msg=Path(path_Header,poses)
+        self.gp_pub.publish(msg)
+        rospy.loginfo("Published Global Plan")
+
     def publish_gps(self,data):
         G=NavSatFix()
         gps_fmt='c3f'
@@ -132,6 +155,8 @@ class RFD900_GCS:
                         self.publish_cm('a',msg)
                 if msg_type == 's':
                         self.publish_mbs(msg)
+                if msg_type == 'd':
+                        self.publish_gp(msg)
             except AttributeError:
                 pass
             except struct.error:
