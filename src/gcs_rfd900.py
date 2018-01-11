@@ -27,8 +27,9 @@ class RFD900_GCS:
         self.Gcm_pub = rospy.Publisher('/rfd_bridge/global_costmap/costmap', OccupancyGrid, queue_size=10)
         self.gps_pub = rospy.Publisher('/rfd_bridge/gps_fix', NavSatFix, queue_size=10)
         self.mbs_pub = rospy.Publisher('/rfd_bridge/move_base/status', alm.GoalStatusArray, queue_size=10)
-        self.gp_pub = rospy.Publisher('/rfd_bridge/move_base/Gloal_Plan', Path, queue_size=10)
+        self.gp_pub = rospy.Publisher('/rfd_bridge/move_base/global_plan', Path, queue_size=10)
         rospy.Subscriber("cmd_vel", Twist, self.send_cmd_vel)
+        rospy.Subscriber("/move_base_simple/goal", PoseStamped, self.send_goal)
         self.serial_buffer=""
         self.data=""
         self.tf_fmt='c10s10s7f'
@@ -138,6 +139,15 @@ class RFD900_GCS:
         self.s.write(bytes(packet)+'\x04\x17\xfe')
         self.cv_timer=time.time()+1/float(self.cv_rate)
 
+    def send_goal(self,data):
+        goal_fmt='c7f'
+        print('recevied goal')
+        packet=struct.pack(goal_fmt,'g',data.pose.position.x,data.pose.position.y,
+            data.pose.position.z,data.pose.orientation.x,data.pose.orientation.y,
+            data.pose.orientation.z,data.pose.orientation.w)
+        print("sent goal")
+        self.s.write(bytes(packet)+'\x04\x17\xfe')
+
     def process_msgs(self):
         if len(self.read_buffer) > 0:
             msg=self.read_buffer.pop(0)
@@ -158,7 +168,7 @@ class RFD900_GCS:
                 if msg_type == 'd':
                         self.publish_gp(msg)
             except AttributeError:
-                pass
+                rospy.logwarn("AttributeError")
             except struct.error:
                 rospy.logwarn("Corrupt Packet")
             except zlib.error:

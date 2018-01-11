@@ -3,6 +3,7 @@ import rospy
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.msg import Path
 from sensor_msgs.msg import NavSatFix
@@ -23,6 +24,7 @@ class RFD900_Rover:
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
         self.cv_pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+        self.goal_pub = rospy.Publisher('/move_base_simple/goal', PoseStamped, queue_size=10)
         rospy.Subscriber("/move_base/local_costmap/costmap", OccupancyGrid, self.local_CM_callback)
         rospy.Subscriber("/move_base/global_costmap/costmap", OccupancyGrid, self.global_CM_callback)
         rospy.Subscriber("/mavros/global_position/raw/fix", NavSatFix, self.gps_callback)
@@ -109,7 +111,7 @@ class RFD900_Rover:
         compressed_data=zlib.compress(bytess,9)
         packet=struct.pack(gp_fmt,'d',len(self.GPlan))
         self.s.write(bytes(packet)+bytes(compressed_data)+'\x04\x17\xfe')
-        rospy.loginfo("Sent Move_base status msg")
+        rospy.loginfo("Sent Global Plan")
         self.gp_timer=time.time()+1/float(self.gp_rate)
 
     def local_CM_callback(self,data):
@@ -130,8 +132,9 @@ class RFD900_Rover:
     def global_path_callback(self,data):
         self.GPlan=data.poses
         self.GPlan=list()
+        self.gp_timer=time.time()-1
         for i in data.poses:
-            self.GPlan.extend([float(i.pose.position.x),float(i.pose.position.y)])
+            self.GPlan.extend([i.pose.position.x,i.pose.position.y])
         
     def publish_cmd_vel(self,data):
         cv_fmt='c2f'
@@ -140,7 +143,22 @@ class RFD900_Rover:
         T.linear.x=read_msg[1]
         T.angular.z=read_msg[2]
         self.cv_pub.publish(T)
-        rospy.loginfo("Publish Twist Msg")
+        rospy.loginfo("Published Twist Msg")
+
+    def publish_goal(self,data):
+        goal_fmt='c7f'
+        read_msg=struct.unpack(goal_fmt,data)
+        T=PoseStamped()
+        T.header.frame_id='map'
+        T.pose.position.x=read_msg[1]
+        T.pose.position.y=read_msg[2]
+        T.pose.position.z=read_msg[3]
+        T.pose.orientation.x=read_msg[4]
+        T.pose.orientation.y=read_msg[5]
+        T.pose.orientation.z=read_msg[6]
+        T.pose.orientation.w=read_msg[7]
+        self.goal_pub.publish(T)
+        rospy.loginfo("Published Goal")
 
     def read_msg_spinner(self):
         while not rospy.is_shutdown():
@@ -186,6 +204,11 @@ class RFD900_Rover:
                         self.publish_cmd_vel(msg)
             except:
                 rospy.logwarn("Failed to Send Twist Msg")
+            try:
+                if msg_type == 'g':
+                        self.publish_goal(msg)
+            except AttributeError:
+                rospy.logwarn("Failed to Send Goal")
 
 
     def spinner(self):
